@@ -180,7 +180,10 @@ def poisson_dct_neumaan(gx, gy):
 
     # Cosine transform of z (Eq. 55 in [1])
     # (x, y) = np.meshgrid(range(1, f.shape[1] + 1), range(1, f.shape[0] + 1), copy=True)
-    (x, y) = np.meshgrid(np.arange(1, f.shape[1] + 1, dtype=np.float32), np.arange(1, f.shape[0] + 1, dtype=np.float32))
+    (x, y) = np.meshgrid(
+        np.arange(1, f.shape[1] + 1, dtype=np.float32),
+        np.arange(1, f.shape[0] + 1, dtype=np.float32),
+    )
     denom = 4 * (
         (np.sin(0.5 * math.pi * x / (f.shape[1]))) ** 2
         + (np.sin(0.5 * math.pi * y / (f.shape[0]))) ** 2
@@ -318,8 +321,8 @@ class Reconstruction3D:
         if np.isnan(nz).any():
             print("nan found")
         nz[np.where(np.isnan(nz))] = 0
-        gx = nx / nz
-        gy = ny / nz
+        gx = -nx / nz
+        gy = -ny / nz
         if MARKER_INTERPOLATE_FLAG:
             # gx, gy = interpolate_gradients(gx, gy, img, cm, cmmm)
             dilated_mm = dilate(markermask, ksize=3, iter=2)

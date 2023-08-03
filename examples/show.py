@@ -65,6 +65,8 @@ def main():
         if CALCULATE_DEPTH_FLAG:
             dm = dev.get_depth()
             vis3d.update(dm)
+            # print("depth min max", np.min(dm), np.max(dm))
+            # cv2.imshow("3d", (dm-dm.min())/(dm.max()-dm.min()))
 
         cv2.imshow("Image", f1)
 

@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="gsmini",
-    version="1.0",
+    version="2.0",
     python_requires=">=3.8",
     packages=find_packages(),
     license="",
