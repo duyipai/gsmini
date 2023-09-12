@@ -141,13 +141,13 @@ def get_features(img, pixels, features, imgw, imgh):
 # 2D integration via Poisson solver
 #
 def poisson_dct_neumaan(gx, gy):
-    gxx = 1 * (
-        gy[np.concatenate((np.arange(1, gx.shape[0]), np.array([gx.shape[0] - 1]))), :]
-        - gy[np.concatenate((np.array([0]), np.arange(gx.shape[0] - 1))), :]
-    )
-    gyy = 1 * (
+    gxx = (
         gx[:, np.concatenate((np.arange(1, gx.shape[1]), np.array([gx.shape[1] - 1])))]
         - gx[:, np.concatenate((np.array([0]), np.arange(gx.shape[1] - 1)))]
+    )
+    gyy = (
+        gy[np.concatenate((np.arange(1, gx.shape[0]), np.array([gx.shape[0] - 1]))), :]
+        - gy[np.concatenate((np.array([0]), np.arange(gx.shape[0] - 1))), :]
     )
     f = gxx + gyy
 
@@ -320,7 +320,7 @@ class Reconstruction3D:
         nz = np.sqrt(1 - nx**2 - ny**2)
         if np.isnan(nz).any():
             print("nan found")
-        nz[np.where(np.isnan(nz))] = 0
+        nz[np.where(np.isnan(nz))] = np.nanmean(nz)
         gx = -nx / nz
         gy = -ny / nz
         if MARKER_INTERPOLATE_FLAG:
