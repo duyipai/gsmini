@@ -13,15 +13,16 @@ def main():
     rospy.init_node("gsminiros", anonymous=True)
 
     # Set flags
-    DEVICE = "cuda"
-    MASK_MARKERS_FLAG = True
-    CALCULATE_DEPTH_FLAG = True
-    CALCULATE_SHEAR_FLAG = True
-    SHOW_NOW = False
+    DEVICE = rospy.get_param("~device", "cuda")  # robot radius in grid units
+    MASK_MARKERS_FLAG = rospy.get_param("~mask_markers", True)
+    CALCULATE_SHEAR_FLAG = rospy.get_param("~calculate_shear", True)
+    CALCULATE_DEPTH_FLAG = rospy.get_param("~calculate_depth", True)
+    CAMERA_NAME = rospy.get_param("~camera_name", "GelSight Mini")
+    SHOW_NOW = rospy.get_param("~show_now", False)
 
     # the device ID can change after unplugging and changing the usb ports.
     # on linux run, v4l2-ctl --list-devices, in the terminal to get the device ID for camera
-    cam_id = gsdevice.get_camera_id("GelSight Mini")
+    cam_id = gsdevice.get_camera_id(CAMERA_NAME)
     dev = gsdevice.Camera(
         cam_id,
         calcDepth=CALCULATE_DEPTH_FLAG,
