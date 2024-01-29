@@ -7,28 +7,50 @@ import numpy as np
 
 from . import gs3drecon
 from .markertracker import MarkerTracker
+import subprocess
 
 
 def get_camera_id(camera_name):
-    cam_num = None
+    # Execute the command and capture its output
+    output = subprocess.check_output("v4l2-ctl --list-devices", shell=True, text=True)
 
-    for file in os.listdir("/sys/class/video4linux"):
-        real_file = os.path.realpath("/sys/class/video4linux/" + file + "/name")
-        with open(real_file, "rt") as name_file:
-            name = name_file.read().rstrip()
-        if camera_name in name:
-            cam_num = int(re.search("\d+$", file).group(0))
-            found = "FOUND " + str(cam_num) + " !"
-        else:
-            found = "      "
-        print("{} {} -> {}".format(found, file, name))
+    # Split the output into lines
+    lines = output.split("\n")
 
-    return cam_num - 1
+    # Initialize variables
+    camera_found = False
+    video_devices = []
+
+    # Iterate over the lines
+    for line in lines:
+        # Check if the current line contains the camera name
+        if camera_name in line:
+            camera_found = True
+            continue
+
+        # If camera is found, look for video devices
+        if camera_found:
+            match = re.search(r"/dev/video(\d+)", line)
+            if match:
+                video_devices.append(int(match.group(1)))
+            else:
+                # No more video devices for the camera, break the loop
+                break
+
+    # Filter for even video devices
+    even_video_devices = [dev for dev in video_devices if dev % 2 == 0]
+
+    assert (
+        len(even_video_devices) == 1
+    ), "Video device not found or multiple devices found. Only one video device should be connected."
+
+    return even_video_devices[0]
 
 
 def resize_crop_mini(img, imgw, imgh):
-    border_size_x, border_size_y = int(img.shape[0] * (1 / 7)), int(
-        np.floor(img.shape[1] * (1 / 7))
+    border_size_x, border_size_y = (
+        int(img.shape[0] * (1 / 7)),
+        int(np.floor(img.shape[1] * (1 / 7))),
     )  # remove 1/7th of border from each size
     img = img[
         border_size_x : img.shape[0] - border_size_x,
@@ -106,11 +128,7 @@ class Camera:
             self._lk_params = dict(
                 winSize=(15, 15),
                 maxLevel=2,
-                criteria=(
-                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                    10,
-                    0.03,
-                ),
+                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03),
             )
             self._p0 = np.array((self._Ox, self._Oy), np.float32).T.reshape((-1, 1, 2))
             # finished initializing p0

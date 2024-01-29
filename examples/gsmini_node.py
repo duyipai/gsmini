@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import cv2
 import numpy as np
 import rospy
@@ -32,17 +34,17 @@ def main():
     )
 
     cvbridge = CvBridge()
-    image_pub = rospy.Publisher("/gsmini_image", Image, queue_size=1)
+    image_pub = rospy.Publisher("gsmini_image", Image, queue_size=1)
 
     if CALCULATE_DEPTH_FLAG:
-        depth_pub = rospy.Publisher("/gsmini_depth", numpy_msg(Floats), queue_size=1)
+        depth_pub = rospy.Publisher("gsmini_depth", numpy_msg(Floats), queue_size=1)
 
         """ use this to plot just the 3d """
         if SHOW_NOW:
             vis3d = gs3drecon.Visualize3D(dev.imgw, dev.imgh, "", dev.mmpp)
 
     if CALCULATE_SHEAR_FLAG:
-        shear_pub = rospy.Publisher("/gsmini_shear", numpy_msg(Floats), queue_size=1)
+        shear_pub = rospy.Publisher("gsmini_shear", numpy_msg(Floats), queue_size=1)
 
     rate = rospy.Rate(14)
     while not rospy.is_shutdown():
