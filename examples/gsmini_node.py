@@ -4,15 +4,14 @@ import cv2
 import numpy as np
 import rospy
 from cv_bridge import CvBridge
-from rospy.numpy_msg import numpy_msg
-from rospy_tutorials.msg import Floats
 from sensor_msgs.msg import Image
 
 from gsmini import gs3drecon, gsdevice
+from gsmini.msg import Shear
 
 
 def main():
-    rospy.init_node("gsminiros", anonymous=True)
+    rospy.init_node("gsminiros")
 
     # Set flags
     DEVICE = rospy.get_param("~device", "cuda")  # robot radius in grid units
@@ -37,14 +36,14 @@ def main():
     image_pub = rospy.Publisher("gsmini_image", Image, queue_size=1)
 
     if CALCULATE_DEPTH_FLAG:
-        depth_pub = rospy.Publisher("gsmini_depth", numpy_msg(Floats), queue_size=1)
+        depth_pub = rospy.Publisher("gsmini_depth", Image, queue_size=1)
 
         """ use this to plot just the 3d """
         if SHOW_NOW:
             vis3d = gs3drecon.Visualize3D(dev.imgw, dev.imgh, "", dev.mmpp)
 
     if CALCULATE_SHEAR_FLAG:
-        shear_pub = rospy.Publisher("gsmini_shear", numpy_msg(Floats), queue_size=1)
+        shear_pub = rospy.Publisher("gsmini_shear", Shear, queue_size=1)
 
     rate = rospy.Rate(14)
     while not rospy.is_shutdown():
@@ -58,11 +57,19 @@ def main():
 
         if CALCULATE_DEPTH_FLAG:
             dm = dev.get_depth()
-            depth_pub.publish(dm.flatten())
+            depth_pub.publish(cvbridge.cv2_to_imgmsg(dm, encoding="32FC1"))
 
         if CALCULATE_SHEAR_FLAG:
             markers = dev.get_markers()
             shear = np.stack((dev.get_initial_markers(), markers), axis=1)
+            shear_msg = Shear()
+            shear_msg.header.stamp = rospy.Time.now()
+            shear_msg.n = dev.marker_shape[0]
+            shear_msg.m = dev.marker_shape[1]
+            shear_msg.header.frame_id = rospy.get_name()
+            shear_msg.initial = dev.get_initial_markers().flatten()
+            shear_msg.markers = markers.flatten()
+
             shear_pub.publish(shear.flatten())
         """ Display the results """
         if SHOW_NOW:

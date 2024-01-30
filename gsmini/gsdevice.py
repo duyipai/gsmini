@@ -1,7 +1,7 @@
 import os
 import re
 from threading import Thread
-
+import time
 import cv2
 import numpy as np
 
@@ -95,9 +95,8 @@ class Camera:
         self.connect()
 
     def connect(self):
-        if (
-            type(self.dev_id) == str
-        ):  # if dev_id is a string, then it is a path used to initialize the depth and marker
+        # if dev_id is a string, then it is a path used to initialize the depth and marker
+        if isinstance(self.dev_id, str):
             import glob
 
             paths = glob.glob(os.path.join(self.dev_id, "*.jpg"))
@@ -111,11 +110,17 @@ class Camera:
                 print("Warning: unable to open video source: ", self.dev_id)
             self._img = self.get_raw_image()
             if self.enableDepth:
-                while self.nn.dm_zero_counter < 50:
+                ret, self._img = self.cam.read()
+                while self._img is None:
+                    print("Warning: unable to read image from camera")
                     ret, self._img = self.cam.read()
+                    time.sleep(0.5)
+
+                while self.nn.dm_zero_counter < 50:
                     self._img = resize_crop_mini(self._img, self.imgw, self.imgh)
                     if ret:
                         self._dm = self.nn.get_depthmap(self._img, self.maskMarkersFlag)
+                    ret, self._img = self.cam.read()
         if self.enableShear:
             self._old_gray = cv2.cvtColor(self._img, cv2.COLOR_BGR2GRAY)
             mtracker = MarkerTracker(np.float32(self._img) / 255.0)
@@ -198,3 +203,7 @@ class Camera:
 
     def disconnect(self):
         self._stop = True
+
+    @property
+    def marker_shape(self):
+        return (self._Ox, self._Oy)

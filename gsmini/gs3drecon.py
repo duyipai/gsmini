@@ -317,7 +317,7 @@ class Reconstruction3D:
         # gy = (b-a) * ((gy - gy.min()) / (gy.max() - gy.min())) + a
         """OPTION#2 calculate gx, gy from nx, ny. """
         # normalize normals to get gradients for poisson
-        nz = np.sqrt(1 - nx**2 - ny**2)
+        nz = np.sqrt(1 - nx ** 2 - ny ** 2)
         if np.isnan(nz).any():
             print("nan found")
         nz[np.where(np.isnan(nz))] = np.nanmean(nz)
