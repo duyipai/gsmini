@@ -15,17 +15,14 @@ def main():
 
     # Set flags
     DEVICE = rospy.get_param("~device", "cuda")  # robot radius in grid units
+    CAMERA_DEVICE = rospy.get_param("~camera_device")
     MASK_MARKERS_FLAG = rospy.get_param("~mask_markers", True)
     CALCULATE_SHEAR_FLAG = rospy.get_param("~calculate_shear", True)
-    CALCULATE_DEPTH_FLAG = rospy.get_param("~calculate_depth", True)
-    CAMERA_NAME = rospy.get_param("~camera_name", "GelSight Mini")
+    CALCULATE_DEPTH_FLAG = rospy.get_param("~calculate_depth", False)
     SHOW_NOW = rospy.get_param("~show_now", False)
 
-    # the device ID can change after unplugging and changing the usb ports.
-    # on linux run, v4l2-ctl --list-devices, in the terminal to get the device ID for camera
-    cam_id = gsdevice.get_camera_id(CAMERA_NAME)
     dev = gsdevice.Camera(
-        cam_id,
+        CAMERA_DEVICE,
         calcDepth=CALCULATE_DEPTH_FLAG,
         calcShear=CALCULATE_SHEAR_FLAG,
         device=DEVICE,
@@ -53,24 +50,22 @@ def main():
         dev.process_image(f1)
 
         """ publish images """
-        image_pub.publish(cvbridge.cv2_to_imgmsg(f1, encoding="passthrough"))
+        image_pub.publish(cvbridge.cv2_to_imgmsg(f1, encoding="bgr8"))
 
         if CALCULATE_DEPTH_FLAG:
             dm = dev.get_depth()
             depth_pub.publish(cvbridge.cv2_to_imgmsg(dm, encoding="32FC1"))
 
         if CALCULATE_SHEAR_FLAG:
-            markers = dev.get_markers()
-            shear = np.stack((dev.get_initial_markers(), markers), axis=1)
+            shear_np = dev.get_shear()
             shear_msg = Shear()
             shear_msg.header.stamp = rospy.Time.now()
             shear_msg.n = dev.marker_shape[0]
             shear_msg.m = dev.marker_shape[1]
             shear_msg.header.frame_id = rospy.get_name()
-            shear_msg.initial = dev.get_initial_markers().flatten()
-            shear_msg.markers = markers.flatten()
-
-            shear_pub.publish(shear.flatten())
+            shear_msg.initial = shear_np[:, 0, :].flatten()
+            shear_msg.markers = shear_np[:, 1, :].flatten()
+            shear_pub.publish(shear_msg)
         """ Display the results """
         if SHOW_NOW:
             cv2.imshow("Image", f1)

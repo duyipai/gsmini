@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 
 from . import gs3drecon
-from .markertracker import MarkerTracker
 import subprocess
 
 
@@ -42,7 +41,7 @@ def get_camera_id(camera_name):
 
     assert (
         len(even_video_devices) == 1
-    ), "Video device not found or multiple devices found. Only one video device should be connected."
+    ), f"Video device not found or multiple devices found. Only one video device should be connected.{even_video_devices}"
 
     return even_video_devices[0]
 
@@ -79,11 +78,7 @@ class Camera:
         self.imgh = 240
         self.mmpp = mmpp
         self._dm = None
-        self._Ox = None
-        self._Oy = None
-        self._p0 = None
         self._dm_dirty = False
-        self._shear_dirty = False
         self.dev_id = dev_id
         self.cam = None
         self.enableDepth = calcDepth
@@ -96,61 +91,39 @@ class Camera:
 
     def connect(self):
         # if dev_id is a string, then it is a path used to initialize the depth and marker
-        if isinstance(self.dev_id, str):
-            import glob
-
-            paths = glob.glob(os.path.join(self.dev_id, "*.jpg"))
-            for path in paths:
-                self._img = cv2.imread(path)
-                if self.enableDepth:
-                    self._dm = self.nn.get_depthmap(self._img, self.maskMarkersFlag)
-        else:
-            self.cam = cv2.VideoCapture(self.dev_id)
-            if self.cam is None or not self.cam.isOpened():
-                print("Warning: unable to open video source: ", self.dev_id)
-            self._img = self.get_raw_image()
-            if self.enableDepth:
+        self.cam = cv2.VideoCapture(self.dev_id)
+        if self.cam is None or not self.cam.isOpened():
+            print("Warning: unable to open video source: ", self.dev_id)
+        self._img = self.get_raw_image()
+        if self.enableDepth:
+            ret, self._img = self.cam.read()
+            while self._img is None:
+                print("Warning: unable to read image from camera")
                 ret, self._img = self.cam.read()
-                while self._img is None:
-                    print("Warning: unable to read image from camera")
-                    ret, self._img = self.cam.read()
-                    time.sleep(0.5)
+                time.sleep(0.5)
 
-                while self.nn.dm_zero_counter < 50:
-                    self._img = resize_crop_mini(self._img, self.imgw, self.imgh)
-                    if ret:
-                        self._dm = self.nn.get_depthmap(self._img, self.maskMarkersFlag)
-                    ret, self._img = self.cam.read()
+            while self.nn.dm_zero_counter < 50:
+                self._img = resize_crop_mini(self._img, self.imgw, self.imgh)
+                if ret:
+                    self._dm = self.nn.get_depthmap(self._img, self.maskMarkersFlag)
+                ret, self._img = self.cam.read()
         if self.enableShear:
-            self._old_gray = cv2.cvtColor(self._img, cv2.COLOR_BGR2GRAY)
-            mtracker = MarkerTracker(np.float32(self._img) / 255.0)
-            self._Ox = mtracker.initial_marker_center[:, 1]
-            self._Oy = mtracker.initial_marker_center[:, 0]
-            self._initial_markers = np.array(
-                (self._Ox, self._Oy), np.float32
-            ).T.reshape((-1, 2))
-            self._nct = len(mtracker.initial_marker_center)
-            self._lk_params = dict(
-                winSize=(15, 15),
-                maxLevel=2,
-                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03),
-            )
-            self._p0 = np.array((self._Ox, self._Oy), np.float32).T.reshape((-1, 1, 2))
-            # finished initializing p0
+            from gsmini.marker_tracker.optical_flow import MarkerTracking
+
+            self._marker_tracker = MarkerTracking(self._img)
         if self.cam is not None:
             self._stop = False
             Thread(target=self._update_image).start()
         return
 
     def get_raw_image(self):
+        ret, f0 = self.cam.read()
         for _ in range(10):  # flush out fist 10 frames to remove black frames
             ret, f0 = self.cam.read()
-        ret, f0 = self.cam.read()
         if ret:
             f0 = resize_crop_mini(f0, self.imgw, self.imgh)
         else:
             print("ERROR! reading image from camera")
-
         return f0
 
     def get_image(self):
@@ -162,17 +135,11 @@ class Camera:
             return None
         return self._dm.copy()
 
-    def get_markers(self):
+    def get_shear(self):
         if not self.enableShear:
             print("ERROR! shear is not enabled")
             return None
-        return np.squeeze(self._p0.copy())
-
-    def get_initial_markers(self):
-        if not self.enableShear:
-            print("ERROR! shear is not enabled")
-            return None
-        return self._initial_markers.copy()
+        return self._shear.copy()
 
     def process_image(self, img):
         if self.enableDepth:
@@ -182,7 +149,10 @@ class Camera:
 
     def _update_image(self):
         while not self._stop:
-            ret, f0 = self.cam.read()
+            try:
+                ret, f0 = self.cam.read()
+            except Exception:
+                ret = False
             if ret:
                 f0 = resize_crop_mini(f0, self.imgw, self.imgh)
                 self._img = f0
@@ -191,19 +161,13 @@ class Camera:
         self._dm = self.nn.get_depthmap(img, self.maskMarkersFlag)
 
     def _update_shear(self, img):
-        new_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        p1, st, _ = cv2.calcOpticalFlowPyrLK(
-            self._old_gray, new_gray, self._p0, None, **self._lk_params
-        )
-        if np.sum(st) < self._nct:
-            print("all pts did not converge")
-        else:
-            self._p0 = p1.reshape(-1, 1, 2)
-            self._old_gray = new_gray
+        # shape: (N,M,2,2)
+        # ([init_markers,curr_markers],N,M,[x,y])
+        self._shear = self._marker_tracker.get_flow(img)
 
     def disconnect(self):
         self._stop = True
 
     @property
     def marker_shape(self):
-        return (self._Ox, self._Oy)
+        return self._marker_tracker.marker_shape
